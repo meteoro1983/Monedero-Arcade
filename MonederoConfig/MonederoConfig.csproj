@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>MonederoConfig</AssemblyName>
+    <RootNamespace>MonederoConfig</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationHighDpiMode>DpiUnaware</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <!-- Mismo código de config y de dibujo que monedero.exe: la vista previa es idéntica al overlay real -->
+  <ItemGroup>
+    <Compile Include="..\MonederoArcade\IniFile.cs" Link="Compartido\IniFile.cs" />
+    <Compile Include="..\MonederoArcade\GameConfig.cs" Link="Compartido\GameConfig.cs" />
+    <Compile Include="..\MonederoArcade\OverlayRenderer.cs" Link="Compartido\OverlayRenderer.cs" />
+    <Compile Include="..\MonederoArcade\Sonido.cs" Link="Compartido\Sonido.cs" />
+    <Compile Include="..\MonederoArcade\Logger.cs" Link="Compartido\Logger.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+# Versión compilada: va como release
+PORTABLE_*/
+salida/
+*.log
