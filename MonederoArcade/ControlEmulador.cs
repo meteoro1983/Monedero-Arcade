@@ -17,6 +17,30 @@ namespace MonederoArcade
 
         public bool EsRetroArch => _emulador == "retroarch";
 
+        /// <summary>
+        /// Juego de PC lanzado por emulatorLauncher: _pid es el del launcher (vive mientras viva el juego)
+        /// y el juego es su árbol de procesos hijos.
+        /// </summary>
+        public bool EsPc => _emulador == "pc";
+
+        // Árbol congelado al pausar: se reanuda exactamente lo que se suspendió.
+        private List<int> _arbolPausado = new();
+
+        private List<int> PidsJuego() => ProcessTree.Descendientes(_pid).Select(d => d.Pid).ToList();
+
+        private IntPtr VentanaJuego()
+        {
+            IntPtr mejor = IntPtr.Zero; long area = -1;
+            foreach (var pid in PidsJuego())
+            {
+                var h = NativeMethods.VentanaPrincipalGrande(pid);
+                if (h == IntPtr.Zero || !NativeMethods.GetWindowRect(h, out var r)) continue;
+                long a = (long)(r.Right - r.Left) * (r.Bottom - r.Top);
+                if (a > area) { area = a; mejor = h; }
+            }
+            return mejor;
+        }
+
         public ControlEmulador(int pid, string emulador, EmuladorConfig cfg)
         {
             _pid = pid;
@@ -30,7 +54,7 @@ namespace MonederoArcade
         {
             if (_cfg.MinimizarAlPausar)
             {
-                _minimizada = NativeMethods.VentanaPrincipalGrande(_pid);
+                _minimizada = EsPc ? VentanaJuego() : NativeMethods.VentanaPrincipalGrande(_pid);
                 if (_minimizada != IntPtr.Zero)
                 {
                     NativeMethods.ShowWindow(_minimizada, NativeMethods.SW_MINIMIZE);
@@ -39,6 +63,15 @@ namespace MonederoArcade
                 }
             }
             if (EsRetroArch) { _ra.PausarSiHaceFalta(); return; }
+            if (EsPc)
+            {
+                _arbolPausado = PidsJuego();
+                Logger.Log($"Juego de PC: árbol = {string.Join(", ", ProcessTree.Descendientes(_pid).Select(d => $"{d.Nombre}({d.Pid})"))}");
+                if (_cfg.SilenciarAlPausar) AudioMute.Silenciar(_arbolPausado, true);
+                if (_cfg.MetodoPausa == "hotkey") { EnviarHotkey(_cfg.TeclaPausa); return; }
+                foreach (var pid in _arbolPausado) ProcessControl.Suspender(pid);
+                return;
+            }
             if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
             else ProcessControl.Suspender(_pid);
         }
@@ -46,6 +79,13 @@ namespace MonederoArcade
         public void Reanudar()
         {
             if (EsRetroArch) _ra.ReanudarSiHaceFalta();
+            else if (EsPc)
+            {
+                if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
+                else foreach (var pid in _arbolPausado) ProcessControl.Reanudar(pid);
+                if (_cfg.SilenciarAlPausar) AudioMute.Silenciar(_arbolPausado, false);
+                _arbolPausado = new();
+            }
             else if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
             else ProcessControl.Reanudar(_pid);
 
@@ -71,6 +111,7 @@ namespace MonederoArcade
 
         private IntPtr Hwnd()
         {
+            if (EsPc) return VentanaJuego();
             try { using var p = Process.GetProcessById(_pid); p.Refresh(); return p.MainWindowHandle; }
             catch { return IntPtr.Zero; }
         }
@@ -128,6 +169,11 @@ namespace MonederoArcade
                 _ra.Quit();
                 if (EsperarSalida(2000)) { Logger.Log("Cierre limpio por QUIT (2)"); return; }
             }
+            else if (EsPc)
+            {
+                CerrarJuegoPc();
+                return;
+            }
             else
             {
                 ProcessControl.Reanudar(_pid); // un proceso suspendido no puede procesar el cierre
@@ -144,6 +190,33 @@ namespace MonederoArcade
 
             Logger.Log("Último recurso: Kill (RetroBat lo verá como cierre inesperado)");
             try { using var p = Process.GetProcessById(_pid); p.Kill(); } catch { }
+        }
+
+        /// <summary>
+        /// Juego de PC: reanudar el árbol, WM_CLOSE a sus ventanas y esperar a que emulatorLauncher
+        /// termine (lo hace solo cuando el juego sale). Si no responde, Kill del árbol del juego (nunca
+        /// del launcher: con el sistema windows emulatorLauncher siempre devuelve 0 → sin "cierre inesperado").
+        /// </summary>
+        private void CerrarJuegoPc()
+        {
+            foreach (var pid in _arbolPausado) ProcessControl.Reanudar(pid);
+            var arbol = PidsJuego();
+            foreach (var pid in arbol) ProcessControl.Reanudar(pid);
+            if (_cfg.SilenciarAlPausar && _arbolPausado.Count > 0) AudioMute.Silenciar(_arbolPausado, false);
+            _arbolPausado = new();
+
+            var ventanas = arbol.SelectMany(NativeMethods.VentanasVisibles).ToList();
+            Logger.Log($"Juego de PC: WM_CLOSE a {ventanas.Count} ventana(s) de {arbol.Count} proceso(s)");
+            foreach (var h in ventanas) NativeMethods.PostMessage(h, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+            if (EsperarSalida(_cfg.EsperaCierreMs)) { Logger.Log("Cierre limpio por WM_CLOSE (juego de PC)"); return; }
+
+            // Muchos juegos piden "¿salir?" o ignoran WM_CLOSE en pantalla completa: se termina el árbol.
+            foreach (var pid in PidsJuego().AsEnumerable().Reverse())
+            {
+                try { using var p = Process.GetProcessById(pid); p.Kill(); Logger.Log($"Kill {p.ProcessName}({pid})"); } catch { }
+            }
+            if (EsperarSalida(5000)) Logger.Log("Juego de PC cerrado (Kill); emulatorLauncher terminó");
+            else Logger.Log("emulatorLauncher sigue vivo tras cerrar el juego");
         }
     }
 }

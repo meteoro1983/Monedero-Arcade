@@ -27,6 +27,10 @@ namespace MonederoArcade
         /// pantalla sin bordes de Dolphin en cada lanzamiento, por eso se resuelve desde acá.
         /// </summary>
         public bool MinimizarAlPausar { get; set; } = false;
+        /// <summary>Juegos de PC: silencia su audio mientras están suspendidos (evita el zumbido de DirectSound).</summary>
+        public bool SilenciarAlPausar { get; set; } = false;
+        /// <summary>Juegos de PC: cuánto esperar tras WM_CLOSE antes de terminar el proceso.</summary>
+        public int EsperaCierreMs { get; set; } = 4000;
     }
 
     /// <summary>
@@ -71,6 +75,8 @@ texto_linea2=TO CONTINUE
 texto_gameover1=GAME OVER
 texto_gameover2=RETURNING TO MENU
 sistemas_exentos=mame,neogeo,fbneo,fb,naomi,atomiswave,model2,model3,teknoparrot
+; sistemas_pc: sistemas cuyos juegos son programas de PC (los lanza emulatorLauncher)
+sistemas_pc=windows
 
 [default]
 tiempo_overlay=20
@@ -148,6 +154,20 @@ tecla_pausa=Space
 [emulador:ppsspp]
 metodo_pausa=suspend
 tecla_pausa=Space
+
+; Juegos de PC (sistemas de [general] sistemas_pc, por defecto windows): se suspende todo el árbol de
+; procesos del juego. Se minimiza (la pantalla completa exclusiva tapa el cartel) y se silencia (el audio
+; de un proceso suspendido puede quedar zumbando en bucle).
+[emulador:pc]
+metodo_pausa=suspend
+minimizar_al_pausar=1
+silenciar_al_pausar=1
+espera_cierre_ms=4000
+
+[windows]
+; los juegos de PC tienen intros y menús largos
+tiempo_overlay=60
+tiempo_countdown=20
 ");
         }
 
@@ -186,12 +206,23 @@ tecla_pausa=Space
             var g = new IniFile(_generalIniPath);
             var sec = "emulador:" + emulador.ToLowerInvariant();
             var defTecla = emulador.ToLowerInvariant() == "dolphin" ? "F10" : "Space";
+            bool pc = emulador.ToLowerInvariant() == "pc";
             return new EmuladorConfig
             {
                 MetodoPausa = g.GetString(sec, "metodo_pausa", "suspend").Trim().ToLowerInvariant(),
                 TeclaPausa = g.GetString(sec, "tecla_pausa", defTecla).Trim(),
-                MinimizarAlPausar = g.GetBool(sec, "minimizar_al_pausar", emulador.ToLowerInvariant() == "dolphin")
+                MinimizarAlPausar = g.GetBool(sec, "minimizar_al_pausar", emulador.ToLowerInvariant() == "dolphin" || pc),
+                SilenciarAlPausar = g.GetBool(sec, "silenciar_al_pausar", pc),
+                EsperaCierreMs = g.GetInt(sec, "espera_cierre_ms", 4000)
             };
+        }
+
+        /// <summary>Sistemas cuyos juegos son programas de PC lanzados por emulatorLauncher (por defecto "windows").</summary>
+        public bool EsSistemaPc(string sistema)
+        {
+            var lista = new IniFile(_generalIniPath).GetString("general", "sistemas_pc", "windows");
+            return lista.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Contains(sistema, StringComparer.OrdinalIgnoreCase);
         }
 
         public string RomIniPath(string sistema, string nombreArchivoRom) =>

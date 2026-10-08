@@ -28,6 +28,12 @@ namespace MonederoArcade
         public event Action<LaunchedGame>? JuegoLanzado;
         public event Action<int>? JuegoFinalizado;
 
+        /// <summary>
+        /// Sistemas de RetroBat cuyos juegos son programas de PC (por defecto "windows"). Para ellos se
+        /// vigila a emulatorLauncher.exe: el juego es su árbol de procesos hijos (emulador "pc").
+        /// </summary>
+        public Func<string, bool> EsSistemaPc { get; set; } = s => s == "windows";
+
         public void Tick()
         {
             var actuales = new HashSet<int>();
@@ -37,6 +43,22 @@ namespace MonederoArcade
                 try
                 {
                     var nombre = p.ProcessName.ToLowerInvariant();
+                    if (nombre == "emulatorlauncher")
+                    {
+                        actuales.Add(p.Id);
+                        if (_vistos.Contains(p.Id) || !_logueados.Add(p.Id)) continue;
+                        var cl = ObtenerLineaDeComandos(p.Id);
+                        var sis = ArgumentoDe(cl, "-system")?.ToLowerInvariant();
+                        var rom = ArgumentoDe(cl, "-rom");
+                        if (sis == null || rom == null || !EsSistemaPc(sis)) continue;
+                        Logger.Log($"pc pid={p.Id} (emulatorLauncher) sistema={sis} rom={rom}");
+                        var nombreJuego = Path.GetFileName(rom.TrimEnd('\\', '/'));
+                        if (string.IsNullOrEmpty(nombreJuego)) continue;
+                        _vistos.Add(p.Id);
+                        JuegoLanzado?.Invoke(new LaunchedGame(p.Id, "pc", sis, nombreJuego, rom));
+                        continue;
+                    }
+
                     string? emu = null;
                     foreach (var (prefijo, emulador) in Conocidos)
                     {
@@ -97,6 +119,35 @@ namespace MonederoArcade
             return null;
         }
 
+        /// <summary>Valor que sigue a <paramref name="opcion"/> en la línea de comandos (respeta comillas).</summary>
+        private static string? ArgumentoDe(string? cmdLine, string opcion)
+        {
+            var tokens = Tokenizar(cmdLine);
+            for (int i = 0; i < tokens.Count - 1; i++)
+                if (tokens[i].Equals(opcion, StringComparison.OrdinalIgnoreCase)) return tokens[i + 1];
+            return null;
+        }
+
+        private static List<string> Tokenizar(string? cmdLine)
+        {
+            var tokens = new List<string>();
+            if (string.IsNullOrWhiteSpace(cmdLine)) return tokens;
+            var actual = "";
+            bool entreComillas = false;
+            foreach (var c in cmdLine)
+            {
+                if (c == '"') { entreComillas = !entreComillas; continue; }
+                if (c == ' ' && !entreComillas)
+                {
+                    if (actual.Length > 0) { tokens.Add(actual); actual = ""; }
+                    continue;
+                }
+                actual += c;
+            }
+            if (actual.Length > 0) tokens.Add(actual);
+            return tokens;
+        }
+
         private static bool EsExtensionNoContenido(string t)
         {
             return t.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
@@ -113,21 +164,7 @@ namespace MonederoArcade
         private static string? ExtraerRutaContenido(string? cmdLine)
         {
             if (string.IsNullOrWhiteSpace(cmdLine)) return null;
-
-            var tokens = new List<string>();
-            var actual = "";
-            bool entreComillas = false;
-            foreach (var c in cmdLine)
-            {
-                if (c == '"') { entreComillas = !entreComillas; continue; }
-                if (c == ' ' && !entreComillas)
-                {
-                    if (actual.Length > 0) { tokens.Add(actual); actual = ""; }
-                    continue;
-                }
-                actual += c;
-            }
-            if (actual.Length > 0) tokens.Add(actual);
+            var tokens = Tokenizar(cmdLine);
 
             for (int pasada = 0; pasada < 2; pasada++)
             {
