@@ -77,6 +77,13 @@ texto_gameover2=RETURNING TO MENU
 sistemas_exentos=mame,neogeo,fbneo,fb,naomi,atomiswave,model2,model3,teknoparrot
 ; sistemas_pc: sistemas cuyos juegos son programas de PC (los lanza emulatorLauncher)
 sistemas_pc=windows
+; Salida universal: manteniendo salida_combo (botones XInput separados por +) salida_ms milisegundos se cierra
+; el juego de los sistemas de salida_sistemas (por juego: salida=1/0 en su .ini). Los emuladores ya salen
+; con el hotkey de RetroBat. salida_combo=NONE la apaga.
+salida_combo=BACK+START
+salida_ms=500
+salida_sistemas=windows
+salida_restaurar_resolucion=1
 
 [default]
 tiempo_overlay=20
@@ -221,6 +228,30 @@ tiempo_countdown=20
         public bool EsSistemaPc(string sistema)
         {
             var lista = new IniFile(_generalIniPath).GetString("general", "sistemas_pc", "windows");
+            return lista.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Contains(sistema, StringComparer.OrdinalIgnoreCase);
+        }
+
+        // ---- Salida universal (Select+Start) para juegos de PC ----
+
+        public string SalidaCombo => new IniFile(_generalIniPath).GetString("general", "salida_combo", "BACK+START");
+        public int SalidaMs => new IniFile(_generalIniPath).GetInt("general", "salida_ms", 500);
+        public bool SalidaRestaurarResolucion => new IniFile(_generalIniPath).GetBool("general", "salida_restaurar_resolucion", true);
+
+        /// <summary>
+        /// ¿Monedero se encarga de salir de este juego con el combo? Por sistema (salida_sistemas, por defecto
+        /// windows) o por juego: salida=1/0 en su .ini (vale aunque el .ini tenga activo=0).
+        /// </summary>
+        public bool UsaSalidaUniversal(string sistema, string nombreArchivoRom)
+        {
+            var romIni = RomIniPath(sistema, nombreArchivoRom);
+            if (File.Exists(romIni))
+            {
+                var v = new IniFile(romIni).GetString("monedero", "salida", "").Trim();
+                if (v == "1") return true;
+                if (v == "0") return false;
+            }
+            var lista = new IniFile(_generalIniPath).GetString("general", "salida_sistemas", "windows");
             return lista.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .Contains(sistema, StringComparer.OrdinalIgnoreCase);
         }

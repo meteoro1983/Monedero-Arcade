@@ -28,6 +28,11 @@ namespace MonederoArcade
         public event Action<LaunchedGame>? JuegoLanzado;
         public event Action<int>? JuegoFinalizado;
 
+        /// <summary>Todo emulatorLauncher (cualquier sistema): pid, sistema y nombre del archivo del juego.</summary>
+        public event Action<int, string, string>? LauncherIniciado;
+        public event Action<int>? LauncherFinalizado;
+        private readonly HashSet<int> _launchers = new();
+
         /// <summary>
         /// Sistemas de RetroBat cuyos juegos son programas de PC (por defecto "windows"). Para ellos se
         /// vigila a emulatorLauncher.exe: el juego es su árbol de procesos hijos (emulador "pc").
@@ -50,7 +55,10 @@ namespace MonederoArcade
                         var cl = ObtenerLineaDeComandos(p.Id);
                         var sis = ArgumentoDe(cl, "-system")?.ToLowerInvariant();
                         var rom = ArgumentoDe(cl, "-rom");
-                        if (sis == null || rom == null || !EsSistemaPc(sis)) continue;
+                        if (sis == null || rom == null) continue;
+                        _launchers.Add(p.Id);
+                        LauncherIniciado?.Invoke(p.Id, sis, Path.GetFileName(rom.TrimEnd('\\', '/')));
+                        if (!EsSistemaPc(sis)) continue;
                         Logger.Log($"pc pid={p.Id} (emulatorLauncher) sistema={sis} rom={rom}");
                         var nombreJuego = Path.GetFileName(rom.TrimEnd('\\', '/'));
                         if (string.IsNullOrEmpty(nombreJuego)) continue;
@@ -91,6 +99,12 @@ namespace MonederoArcade
                 {
                     p.Dispose();
                 }
+            }
+
+            foreach (var id in _launchers.Where(id => !actuales.Contains(id)).ToList())
+            {
+                _launchers.Remove(id);
+                LauncherFinalizado?.Invoke(id);
             }
 
             var cerrados = _vistos.Where(id => !actuales.Contains(id)).ToList();

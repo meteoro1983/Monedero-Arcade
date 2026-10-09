@@ -1,4 +1,25 @@
-# Monedero Arcade — Beta 3.6
+# Monedero Arcade — Beta 3.8
+
+## Novedades de la 3.8: salida universal (Select+Start)
+
+Manteniendo **Select+Start** (`salida_combo`, `salida_ms` = 500 ms) se cierra el juego de PC en curso y se vuelve
+a RetroBat sin roturas. Vale para los sistemas de `salida_sistemas` (por defecto `windows`) o por juego con
+`salida=1/0` en su `.ini`; es independiente del crédito (anda aunque el sistema esté exento o el juego pausado).
+Los emuladores (RetroArch, MAME, Dolphin...) ya salen con el hotkey de RetroBat (`es_padtokey.cfg`) y no se tocan.
+
+Cierre escalonado:
+1. `WM_CLOSE` a todas las ventanas del juego (su propio cierre: guarda config y partidas).
+2. Si a los `espera_cierre_ms` (sección `[emulador:pc]`) no salió —pidió "¿salir?", ignora el cierre en pantalla
+   completa o está colgado—, se termina todo su árbol de procesos.
+3. Se espera a que emulatorLauncher termine, se vuelve al modo de video del escritorio si quedó cambiado
+   (`salida_restaurar_resolucion`) y se devuelve el foco a EmulationStation.
+
+**Huérfanos**: si el exe que lanza RetroBat es un launcher que abre el juego real y sale, el combo sigue cerrando
+el juego. Los procesos que un juego deja sin ventana al salir se terminan a los 5 s.
+
+---
+
+# Beta 3.6
 
 ## Novedades de la 3.6
 

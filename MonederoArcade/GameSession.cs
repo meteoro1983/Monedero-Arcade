@@ -247,6 +247,21 @@ namespace MonederoArcade
             });
         }
 
+        /// <summary>
+        /// Salida universal (Select+Start): corta la sesión sin cartel de GAME OVER. Hilo de UI. Devuelve una
+        /// acción bloqueante (para Task.Run) que reanuda el juego si estaba pausado, para que pueda cerrarse.
+        /// </summary>
+        public Action PrepararSalida()
+        {
+            bool pausado = _fase == FaseSesion.OverlayVisible;
+            _fase = FaseSesion.Terminada;
+            _timer.Stop();
+            Desarmar();
+            OcultarOverlay();
+            Logger.Log($"Sesión cortada por el combo de salida (pausada={pausado})");
+            return () => { if (pausado) _control.Reanudar(); };
+        }
+
         public void NotificarProcesoFinalizado()
         {
             _fase = FaseSesion.Terminada;

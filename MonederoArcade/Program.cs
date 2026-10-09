@@ -28,7 +28,7 @@ namespace MonederoArcade
             // Carpeta base: junto al .exe (RetroBat\monedero\), según la spec.
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var configManager = new ConfigManager(baseDir);
-            Logger.Log("=== Monedero Arcade 3.7 iniciado ===");
+            Logger.Log("=== Monedero Arcade 3.8 iniciado ===");
 
             var hook = new CreditHook();
             hook.Instalar();
@@ -36,6 +36,7 @@ namespace MonederoArcade
 
             var watcher = new ProcessWatcher { EsSistemaPc = configManager.EsSistemaPc };
             var sesiones = new Dictionary<int, GameSession>();
+            var salida = new SalidaUniversal();
 
             ConfigForm? configForm = null;
             void AbrirConfig()
@@ -60,11 +61,11 @@ namespace MonederoArcade
             var notifyIcon = new NotifyIcon
             {
                 Icon = System.Drawing.SystemIcons.Application,
-                Text = "Monedero Arcade 3.7 (beta)",
+                Text = "Monedero Arcade 3.8 (beta)",
                 Visible = true
             };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Monedero Arcade 3.7 (beta) corriendo...").Enabled = false;
+            menu.Items.Add("Monedero Arcade 3.8 (beta) corriendo...").Enabled = false;
             menu.Items.Add("Configuración (Ctrl+Alt+F5)", null, (_, _) => AbrirConfig());
             menu.Items.Add("Configurador completo (MonederoConfig)", null, (_, _) =>
             {
@@ -78,6 +79,7 @@ namespace MonederoArcade
                 ProcessControl.ReanudarTodos();
                 hook.Dispose();
                 pad.Dispose();
+                salida.Dispose();
                 notifyIcon.Visible = false;
                 Application.Exit();
             });
@@ -118,8 +120,34 @@ namespace MonederoArcade
                 }
             };
 
+            // Salida universal (Select+Start) para juegos de PC: independiente del crédito (vale también en
+            // sistemas exentos y con la sesión pausada).
+            watcher.LauncherIniciado += (pid, sistema, rom) =>
+            {
+                if (!configManager.UsaSalidaUniversal(sistema, rom)) return;
+                salida.Configurar(configManager.SalidaCombo, configManager.SalidaMs);
+                salida.Agregar(pid, sistema, rom);
+            };
+            watcher.LauncherFinalizado += salida.LauncherTerminado;
+            salida.SalidaPedida += juego =>
+            {
+                Action reanudar = () => { };
+                if (sesiones.Remove(juego.LauncherPid, out var s))
+                {
+                    reanudar = s.PrepararSalida();
+                    s.Dispose();
+                }
+                var espera = configManager.ResolveEmulador("pc").EsperaCierreMs;
+                var resolucion = configManager.SalidaRestaurarResolucion;
+                Task.Run(() =>
+                {
+                    reanudar();
+                    salida.Cerrar(juego, espera, resolucion);
+                });
+            };
+
             var pollTimer = new System.Windows.Forms.Timer { Interval = 1500 };
-            pollTimer.Tick += (_, _) => watcher.Tick();
+            pollTimer.Tick += (_, _) => { watcher.Tick(); salida.Refrescar(); };
             pollTimer.Start();
 
             Application.Run();

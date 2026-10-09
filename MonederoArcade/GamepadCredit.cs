@@ -62,6 +62,20 @@ namespace MonederoArcade
             }
         }
 
+        /// <summary>Máscara de uno o varios botones ("BACK", "BACK+START"); 0 si alguno no existe o es NONE.</summary>
+        public static ushort Mascara(string? combo)
+        {
+            ushort m = 0;
+            foreach (var b in (combo ?? "").Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!Mapa.TryGetValue(b, out var v) || v == 0) return 0;
+                m |= v;
+            }
+            return m;
+        }
+
+        public static ushort LeerBotones(uint i) => Leer(i);
+
         private static ushort Leer(uint i)
         {
             try { return XInputGetState(i, out var s) == 0 ? s.Gamepad.wButtons : (ushort)0; }
