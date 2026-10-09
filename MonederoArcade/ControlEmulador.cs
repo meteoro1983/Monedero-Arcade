@@ -17,6 +17,8 @@ namespace MonederoArcade
 
         public bool EsRetroArch => _emulador == "retroarch";
 
+        public bool MinimizaAlPausar => _cfg.MinimizarAlPausar;
+
         /// <summary>
         /// Juego de PC lanzado por emulatorLauncher: _pid es el del launcher (vive mientras viva el juego)
         /// y el juego es su árbol de procesos hijos.

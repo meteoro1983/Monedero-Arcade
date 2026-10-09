@@ -76,6 +76,12 @@ namespace MonederoArcade
 
         public static ushort LeerBotones(uint i) => Leer(i);
 
+        public static bool Conectado(uint i)
+        {
+            try { return XInputGetState(i, out _) == 0; }
+            catch { return false; }
+        }
+
         private static ushort Leer(uint i)
         {
             try { return XInputGetState(i, out var s) == 0 ? s.Gamepad.wButtons : (ushort)0; }

@@ -174,6 +174,19 @@ namespace MonederoArcade
             {
                 if (apagarFf) _control.ToggleFastForward();
                 _control.Pausar();
+                // Al minimizar (Dolphin, juegos de PC) se sale de la pantalla exclusiva: cambia el modo de video
+                // y Windows le da el foco a otra ventana (EmulationStation). Se reubica el overlay en la pantalla
+                // real y se lo trae al frente, ahora y otra vez cuando el cambio de modo terminó de asentarse.
+                if (Config.UsaOverlay && _control.MinimizaAlPausar)
+                    foreach (var espera in new[] { 0, 700 })
+                    {
+                        Thread.Sleep(espera);
+                        UiThread.Post(() =>
+                        {
+                            if (_fase == FaseSesion.OverlayVisible && !_disposed && !_overlay.IsDisposed)
+                                _overlay.Reubicar();
+                        });
+                    }
             });
 
             Armar();

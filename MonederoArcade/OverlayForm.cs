@@ -62,6 +62,24 @@ namespace MonederoArcade
                        $"(canvas {(OverlayRenderer.EsCrt(bounds.Size, _estilo.Aspecto) ? "CRT 4:3" : "píxel cuadrado")}, fuente {_estilo.Fuente})");
         }
 
+        /// <summary>
+        /// Tras minimizar el emulador: la pantalla volvió al modo del escritorio, así que el overlay se ajusta a la
+        /// pantalla donde está y se pone primero (topmost + primer plano, para ganarle a EmulationStation).
+        /// </summary>
+        public void Reubicar()
+        {
+            if (!IsHandleCreated || !Visible) return;
+            var b = Screen.FromHandle(Handle).Bounds;
+            if (b != Bounds)
+            {
+                Bounds = b;
+                Logger.Log($"Overlay reubicado en {b.Width}x{b.Height} @ {b.X},{b.Y}");
+            }
+            ForzarTopMost();
+            NativeMethods.TraerAlFrente(Handle);
+            Invalidate();
+        }
+
         /// <summary>Deja el overlay tapando el juego mientras se cierra el emulador.</summary>
         public void MostrarGameOver()
         {

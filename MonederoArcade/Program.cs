@@ -28,7 +28,7 @@ namespace MonederoArcade
             // Carpeta base: junto al .exe (RetroBat\monedero\), según la spec.
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var configManager = new ConfigManager(baseDir);
-            Logger.Log("=== Monedero Arcade 3.8 iniciado ===");
+            Logger.Log("=== Monedero Arcade 3.9 iniciado ===");
 
             var hook = new CreditHook();
             hook.Instalar();
@@ -61,11 +61,11 @@ namespace MonederoArcade
             var notifyIcon = new NotifyIcon
             {
                 Icon = System.Drawing.SystemIcons.Application,
-                Text = "Monedero Arcade 3.8 (beta)",
+                Text = "Monedero Arcade 3.9 (beta)",
                 Visible = true
             };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Monedero Arcade 3.8 (beta) corriendo...").Enabled = false;
+            menu.Items.Add("Monedero Arcade 3.9 (beta) corriendo...").Enabled = false;
             menu.Items.Add("Configuración (Ctrl+Alt+F5)", null, (_, _) => AbrirConfig());
             menu.Items.Add("Configurador completo (MonederoConfig)", null, (_, _) =>
             {

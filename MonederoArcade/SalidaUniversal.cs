@@ -32,6 +32,7 @@ namespace MonederoArcade
         private int _msMantener = 500;
         private DateTime? _apretadoDesde;
         private bool _disparado;
+        private ushort _vistosLog;
 
         /// <summary>Se dispara en el hilo de UI cuando el combo se mantuvo apretado con un juego abierto.</summary>
         public event Action<Juego>? SalidaPedida;
@@ -103,7 +104,13 @@ namespace MonederoArcade
 
             bool hay;
             lock (_lock) hay = _juegos.Any(j => !j.Cerrando);
-            if (hay && !_timer.Enabled) { _apretadoDesde = null; _disparado = true; _timer.Start(); }
+            if (hay && !_timer.Enabled)
+            {
+                _apretadoDesde = null; _disparado = true; _timer.Start();
+                var pads = Enumerable.Range(0, 4).Where(i => GamepadCredit.Conectado((uint)i)).ToList();
+                Logger.Log($"Salida: vigilando el combo (0x{_mascara:X4}, {_msMantener} ms); pads XInput conectados: " +
+                           (pads.Count == 0 ? "ninguno" : string.Join(",", pads)));
+            }
             else if (!hay && _timer.Enabled) _timer.Stop();
         }
 
@@ -116,8 +123,19 @@ namespace MonederoArcade
         {
             if (_mascara == 0) return;
             bool apretado = false;
+            ushort vistos = 0;
             for (uint i = 0; i < 4; i++)
-                if ((GamepadCredit.LeerBotones(i) & _mascara) == _mascara) { apretado = true; break; }
+            {
+                var b = GamepadCredit.LeerBotones(i);
+                vistos |= (ushort)(b & _mascara);
+                if ((b & _mascara) == _mascara) { apretado = true; break; }
+            }
+            // Diagnóstico: cada cambio en los botones del combo queda en el log (una línea por cambio).
+            if (vistos != _vistosLog)
+            {
+                _vistosLog = vistos;
+                if (vistos != 0) Logger.Log($"Salida: botones del combo apretados 0x{vistos:X4} (combo 0x{_mascara:X4})");
+            }
 
             if (!apretado)
             {
