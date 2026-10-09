@@ -189,6 +189,16 @@ tiempo_countdown=20
                         .Contains(sistema, StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Juego exento del crédito aunque su sistema no lo esté: exento=1 en su .ini (vale aunque tenga activo=0).
+        /// Para juegos que manejan sus propias fichas (ej. Doom con modo arcade). La salida universal sigue activa.
+        /// </summary>
+        public bool EsJuegoExento(string sistema, string nombreArchivoRom)
+        {
+            var romIni = RomIniPath(sistema, nombreArchivoRom);
+            return File.Exists(romIni) && new IniFile(romIni).GetBool("monedero", "exento", false);
+        }
+
         private static GameConfig LeerBase(IniFile g, string sistema)
         {
             return new GameConfig

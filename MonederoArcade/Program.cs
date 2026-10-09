@@ -94,6 +94,11 @@ namespace MonederoArcade
                     Logger.Log($"Sistema exento ({launched.Sistema}): no se controla {launched.NombreArchivo}");
                     return;
                 }
+                if (configManager.EsJuegoExento(launched.Sistema, launched.NombreArchivo))
+                {
+                    Logger.Log($"Juego exento ({launched.NombreArchivo}): maneja sus propios créditos");
+                    return;
+                }
                 if (sesiones.ContainsKey(launched.ProcessId)) return;
 
                 var cfg = configManager.Resolve(launched.Sistema, launched.NombreArchivo);
