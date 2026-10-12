@@ -28,7 +28,7 @@ namespace MonederoArcade
             // Carpeta base: junto al .exe (RetroBat\monedero\), según la spec.
             var baseDir = AppDomain.CurrentDomain.BaseDirectory;
             var configManager = new ConfigManager(baseDir);
-            Logger.Log("=== Monedero Arcade 3.9 iniciado ===");
+            Logger.Log("=== Monedero Arcade 3.9.1 iniciado ===");
 
             var hook = new CreditHook();
             hook.Instalar();

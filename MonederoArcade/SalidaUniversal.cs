@@ -27,7 +27,10 @@ namespace MonederoArcade
 
         private readonly List<Juego> _juegos = new();
         private readonly object _lock = new();
-        private readonly System.Windows.Forms.Timer _timer = new() { Interval = 50 };
+        // Sondeo del pad en un hilo propio: un Timer de WinForms depende de que el hilo de UI esté libre
+        // (WM_TIMER es el mensaje de menor prioridad) y con el juego en primer plano podía no llegar a contar 500 ms.
+        private Thread? _hilo;
+        private volatile bool _activo;
         private ushort _mascara = 0x0030; // BACK + START
         private int _msMantener = 500;
         private DateTime? _apretadoDesde;
@@ -37,7 +40,17 @@ namespace MonederoArcade
         /// <summary>Se dispara en el hilo de UI cuando el combo se mantuvo apretado con un juego abierto.</summary>
         public event Action<Juego>? SalidaPedida;
 
-        public SalidaUniversal() => _timer.Tick += (_, _) => Poll();
+        public SalidaUniversal() { }
+
+        private void Bucle()
+        {
+            while (_activo)
+            {
+                try { Poll(); }
+                catch (Exception ex) { Logger.Log("Salida (sondeo): " + ex.Message); }
+                Thread.Sleep(30);
+            }
+        }
 
         public void Configurar(string combo, int ms)
         {
@@ -104,14 +117,16 @@ namespace MonederoArcade
 
             bool hay;
             lock (_lock) hay = _juegos.Any(j => !j.Cerrando);
-            if (hay && !_timer.Enabled)
+            if (hay && !_activo)
             {
-                _apretadoDesde = null; _disparado = true; _timer.Start();
+                _apretadoDesde = null; _disparado = true; _activo = true;
+                _hilo = new Thread(Bucle) { IsBackground = true, Name = "SalidaCombo" };
+                _hilo.Start();
                 var pads = Enumerable.Range(0, 4).Where(i => GamepadCredit.Conectado((uint)i)).ToList();
                 Logger.Log($"Salida: vigilando el combo (0x{_mascara:X4}, {_msMantener} ms); pads XInput conectados: " +
                            (pads.Count == 0 ? "ninguno" : string.Join(",", pads)));
             }
-            else if (!hay && _timer.Enabled) _timer.Stop();
+            else if (!hay && _activo) _activo = false;
         }
 
         private void Quitar(Juego j)
@@ -140,6 +155,8 @@ namespace MonederoArcade
             if (!apretado)
             {
                 // Hay que soltar el combo antes de que vuelva a valer (y al armarse, si ya venía apretado).
+                if (_apretadoDesde is DateTime d && !_disparado)
+                    Logger.Log($"Salida: combo soltado a los {(DateTime.UtcNow - d).TotalMilliseconds:0} ms (hace falta {_msMantener})");
                 _apretadoDesde = null;
                 _disparado = false;
                 return;
@@ -151,10 +168,10 @@ namespace MonederoArcade
             _disparado = true;
             Juego? j;
             lock (_lock) j = _juegos.LastOrDefault(x => !x.Cerrando);
-            if (j == null) return;
+            if (j == null) { Logger.Log("Salida: combo completo pero no hay juego armado"); return; }
             j.Cerrando = true;
             Logger.Log($"Combo de salida: cerrando [{j.Sistema}] {j.Rom}");
-            SalidaPedida?.Invoke(j);
+            UiThread.Post(() => SalidaPedida?.Invoke(j));
         }
 
         /// <summary>Cierre escalonado del juego. Bloqueante: llamar desde Task.Run.</summary>
@@ -235,7 +252,7 @@ namespace MonederoArcade
             catch { }
         }
 
-        public void Dispose() => _timer.Dispose();
+        public void Dispose() => _activo = false;
     }
 
     /// <summary>Vuelve el escritorio a su modo guardado si un juego cerrado a la fuerza lo dejó cambiado.</summary>
