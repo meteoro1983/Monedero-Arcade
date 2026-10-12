@@ -21,6 +21,11 @@ namespace MonederoArcade
         private EstiloOverlay _estilo = new();
         private string _countdown = "";
         private bool _gameOver;
+        // Modo banner: franja arriba que baja deslizándose, sin tapar el juego entero ni tocar el foco.
+        private bool _banner;
+        private Size _modo;
+        private int _bannerYFinal;
+        private readonly System.Windows.Forms.Timer _slideTimer = new() { Interval = 15 };
 
         public OverlayForm(string baseDir)
         {
@@ -33,6 +38,7 @@ namespace MonederoArcade
             DoubleBuffered = true;
             Opacity = 0.9;
             _topmostTimer.Tick += (_, _) => ForzarTopMost();
+            _slideTimer.Tick += (_, _) => PasoSlide();
         }
 
         protected override bool ShowWithoutActivation => true;
@@ -52,6 +58,9 @@ namespace MonederoArcade
         {
             _estilo = EstiloOverlay.Cargar(Path.Combine(_baseDir, "config.ini")); // cambios del configurador sin reiniciar
             Bounds = bounds;
+            _banner = false;
+            _modo = bounds.Size;
+            _slideTimer.Stop();
             _gameOver = false;
             _countdown = segundos.ToString();
             if (!Visible) Show();
@@ -60,6 +69,37 @@ namespace MonederoArcade
             Invalidate();
             Logger.Log($"Overlay en {bounds.Width}x{bounds.Height} @ {bounds.X},{bounds.Y} " +
                        $"(canvas {(OverlayRenderer.EsCrt(bounds.Size, _estilo.Aspecto) ? "CRT 4:3" : "píxel cuadrado")}, fuente {_estilo.Fuente})");
+        }
+
+        /// <summary>
+        /// Banner: franja de ~30 % del alto arriba de la pantalla que entra deslizándose (~200 ms). No minimiza
+        /// ni activa nada: el juego (en ventana sin bordes) sigue con el foco y el control.
+        /// </summary>
+        public void MostrarBanner(Rectangle pantalla, int segundos)
+        {
+            _estilo = EstiloOverlay.Cargar(Path.Combine(_baseDir, "config.ini"));
+            _banner = true;
+            _modo = pantalla.Size;
+            _gameOver = false;
+            _countdown = segundos.ToString();
+            int alto = OverlayRenderer.AltoBannerVirtual(_modo) * OverlayRenderer.FactorLineas(_modo);
+            _bannerYFinal = pantalla.Y;
+            Bounds = new Rectangle(pantalla.X, pantalla.Y - alto, pantalla.Width, alto);
+            if (!Visible) Show();
+            ForzarTopMost();
+            _topmostTimer.Start();
+            _slideTimer.Start();
+            Invalidate();
+            Logger.Log($"Banner {pantalla.Width}x{alto} arriba de la pantalla {pantalla.Width}x{pantalla.Height} @ {pantalla.X},{pantalla.Y}");
+        }
+
+        private void PasoSlide()
+        {
+            if (!Visible || !_banner) { _slideTimer.Stop(); return; }
+            int paso = Math.Max(1, Height / 12);
+            int y = Math.Min(_bannerYFinal, Top + paso);
+            SetWindowPos(Handle, HWND_TOPMOST, Left, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            if (y >= _bannerYFinal) _slideTimer.Stop();
         }
 
         /// <summary>
@@ -99,7 +139,7 @@ namespace MonederoArcade
         protected override void OnVisibleChanged(EventArgs e)
         {
             base.OnVisibleChanged(e);
-            if (!Visible) _topmostTimer.Stop();
+            if (!Visible) { _topmostTimer.Stop(); _slideTimer.Stop(); }
         }
 
         private void ForzarTopMost()
@@ -111,12 +151,13 @@ namespace MonederoArcade
         protected override void OnPaint(PaintEventArgs e)
         {
             if (Width <= 0 || Height <= 0) return;
-            OverlayRenderer.Dibujar(e.Graphics, ClientRectangle, ClientSize, _estilo, _baseDir, _countdown, _gameOver);
+            OverlayRenderer.Dibujar(e.Graphics, ClientRectangle, _banner ? _modo : ClientSize, _estilo, _baseDir,
+                                    _countdown, _gameOver, _banner);
         }
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) _topmostTimer.Dispose();
+            if (disposing) { _topmostTimer.Dispose(); _slideTimer.Dispose(); }
             base.Dispose(disposing);
         }
     }

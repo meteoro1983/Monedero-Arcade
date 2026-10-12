@@ -51,10 +51,12 @@ namespace MonederoArcade
         }
 
         private IntPtr _minimizada = IntPtr.Zero;
+        public bool SinMinimizar { get; set; }
 
         public void Pausar()
         {
-            if (_cfg.MinimizarAlPausar)
+            // Con aviso=banner el juego corre sin bordes y el cartel va encima: nunca se minimiza (no se pierde el foco).
+            if (_cfg.MinimizarAlPausar && !SinMinimizar)
             {
                 _minimizada = EsPc ? VentanaJuego() : NativeMethods.VentanaPrincipalGrande(_pid);
                 if (_minimizada != IntPtr.Zero)
@@ -74,6 +76,7 @@ namespace MonederoArcade
                 foreach (var pid in _arbolPausado) ProcessControl.Suspender(pid);
                 return;
             }
+            if (_cfg.SilenciarAlPausar) { _arbolPausado = new() { _pid }; AudioMute.Silenciar(_arbolPausado, true); }
             if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
             else ProcessControl.Suspender(_pid);
         }
@@ -88,8 +91,12 @@ namespace MonederoArcade
                 if (_cfg.SilenciarAlPausar) AudioMute.Silenciar(_arbolPausado, false);
                 _arbolPausado = new();
             }
-            else if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
-            else ProcessControl.Reanudar(_pid);
+            else
+            {
+                if (_cfg.MetodoPausa == "hotkey") EnviarHotkey(_cfg.TeclaPausa);
+                else ProcessControl.Reanudar(_pid);
+                if (_cfg.SilenciarAlPausar && _arbolPausado.Count > 0) { AudioMute.Silenciar(_arbolPausado, false); _arbolPausado = new(); }
+            }
 
             if (_minimizada != IntPtr.Zero)
             {

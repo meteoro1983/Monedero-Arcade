@@ -77,8 +77,19 @@ namespace MonederoArcade
             return !monitorModerno;
         }
 
+        /// <summary>Alto del banner en líneas virtuales (de las 240 del canvas): franja de arriba de la pantalla.</summary>
+        public static int AltoBannerVirtual(Size modo)
+        {
+            int k = FactorLineas(modo);
+            int vh = (int)Math.Ceiling(modo.Height / (double)k);
+            return (int)Math.Round(vh * 0.30);
+        }
+
+        /// <summary>Factor entero de líneas reales por línea virtual (240 -> 1, 480 -> 2, 768 -> 3).</summary>
+        public static int FactorLineas(Size modo) => Math.Max(1, (int)Math.Round(modo.Height / 240.0));
+
         public static void Dibujar(Graphics destino, Rectangle rectDestino, Size modo, EstiloOverlay estilo,
-                                   string baseDir, string countdown, bool gameOver)
+                                   string baseDir, string countdown, bool gameOver, bool banner = false)
         {
             if (modo.Width <= 0 || modo.Height <= 0) return;
 
@@ -89,7 +100,8 @@ namespace MonederoArcade
                              : (int)Math.Round(vh * (double)modo.Width / modo.Height);
             int anchoBmp = crt ? modo.Width : logico;
 
-            using var bmp = new Bitmap(anchoBmp, vh);
+            int alto = banner ? AltoBannerVirtual(modo) : vh;
+            using var bmp = new Bitmap(anchoBmp, alto);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.Clear(Color.Black);
@@ -97,7 +109,22 @@ namespace MonederoArcade
                 g.ScaleTransform(anchoBmp / (float)logico, 1f);
                 var fam = Familia(baseDir, estilo.Fuente);
 
-                if (gameOver)
+                if (banner)
+                {
+                    // Franja: lo mismo que el cartel completo, apretado en ~72 líneas virtuales.
+                    if (gameOver)
+                    {
+                        Linea(g, fam, estilo.GameOver1, 16, Brushes.Yellow, logico, alto * 0.35f);
+                        Linea(g, fam, estilo.GameOver2, 8, Brushes.White, logico, alto * 0.70f);
+                    }
+                    else
+                    {
+                        Linea(g, fam, estilo.Linea1, 16, Brushes.White, logico, alto * 0.22f);
+                        Linea(g, fam, estilo.Linea2, 8, Brushes.White, logico, alto * 0.47f);
+                        Linea(g, fam, countdown, 24, Brushes.Yellow, logico, alto * 0.78f);
+                    }
+                }
+                else if (gameOver)
                 {
                     Linea(g, fam, estilo.GameOver1, 24, Brushes.Yellow, logico, vh * 0.36f);
                     Linea(g, fam, estilo.GameOver2, 8, Brushes.White, logico, vh * 0.58f);

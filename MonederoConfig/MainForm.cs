@@ -192,7 +192,7 @@ namespace MonederoConfig
         // =====================================================================================
         private readonly DataGridView _gridSis = new();
         private readonly ComboBox _cmbNuevoSis = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 120 };
-        private static readonly string[] Avisos = { "overlay", "osd", "ambos" };
+        private static readonly string[] Avisos = { "overlay", "osd", "ambos", "banner" };
 
         private TabPage TabSistemas()
         {

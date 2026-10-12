@@ -49,7 +49,7 @@ namespace MonederoArcade
             Config = config;
             _hook = hookCompartido;
             _pad = padCompartido;
-            _control = new ControlEmulador(pid, emulador, emuCfg);
+            _control = new ControlEmulador(pid, emulador, emuCfg) { SinMinimizar = config.Aviso == "banner" };
 
             _segundosObjetivo = Config.TiempoOverlay;
             _timer.Tick += (_, _) => Tick();
@@ -71,6 +71,7 @@ namespace MonederoArcade
             Config.FastForward = nuevo.FastForward;
             Config.TiempoFastForward = nuevo.TiempoFastForward;
             Config.Aviso = nuevo.Aviso;
+            _control.SinMinimizar = nuevo.Aviso == "banner";
             if (_fase == FaseSesion.EsperandoPrimerAviso)
                 _segundosObjetivo = _primerPeriodo ? Config.TiempoOverlay : Config.IntervaloLoop;
             Logger.Log("Config de la sesión actualizada desde la interfaz");
@@ -190,7 +191,8 @@ namespace MonederoArcade
             });
 
             Armar();
-            if (Config.UsaOverlay) _overlay.MostrarEn(ObtenerPantallaObjetivo(), _countdownRestante);
+            if (Config.Aviso == "banner") _overlay.MostrarBanner(ObtenerPantallaObjetivo(), _countdownRestante);
+            else if (Config.UsaOverlay) _overlay.MostrarEn(ObtenerPantallaObjetivo(), _countdownRestante);
             if (Config.UsaOsd) Task.Run(() => _control.ShowMsg($"INSERT COIN - {Config.TiempoCountdown}"));
         }
 
