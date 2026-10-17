@@ -3,11 +3,13 @@ using System.Windows.Forms;
 
 namespace MonederoArcade
 {
-    public enum FaseSesion { EsperandoPrimerAviso, OverlayVisible, Terminada }
+    public enum FaseSesion { EsperandoPrimerAviso, OverlayVisible, TimerVisible, Terminada }
 
     /// <summary>
     /// Ciclo de una partida: [fast-forward opcional] -> espera -> overlay + countdown + pausa ->
-    /// reanudar con crédito (loop) o cerrar el emulador por abandono.
+    /// reanudar con crédito (loop) o cerrar el emulador por abandono. La primera espera depende del modo
+    /// (entrada: tiempo_overlay; diferido/silencioso: minutos_libres). En modo silencioso no hay overlay ni pausa:
+    /// aparece un timer chico y, sin crédito, se cierra el juego.
     /// </summary>
     public class GameSession : IDisposable
     {
@@ -19,6 +21,7 @@ namespace MonederoArcade
 
         private readonly ControlEmulador _control;
         private readonly OverlayForm _overlay;
+        private readonly TimerForm _timerForm;
         private readonly string _baseDir;
         private readonly System.Windows.Forms.Timer _timer = new() { Interval = 1000 };
         private readonly CreditHook _hook;
@@ -42,6 +45,7 @@ namespace MonederoArcade
         {
             _baseDir = baseDir;
             _overlay = new OverlayForm(baseDir);
+            _timerForm = new TimerForm(baseDir);
             ProcessId = pid;
             Emulador = emulador;
             Sistema = sistema;
@@ -51,14 +55,19 @@ namespace MonederoArcade
             _pad = padCompartido;
             _control = new ControlEmulador(pid, emulador, emuCfg) { SinMinimizar = config.Aviso == "banner" };
 
-            _segundosObjetivo = Config.TiempoOverlay;
+            _segundosObjetivo = PrimeraEspera();
             _timer.Tick += (_, _) => Tick();
             Logger.Log($"Sesión {emulador} [{sistema}] {nombreArchivo} pid={pid} overlay={config.TiempoOverlay}s " +
                        $"countdown={config.TiempoCountdown}s loop={config.IntervaloLoop}s ff={config.FastForward}/{config.TiempoFastForward}s " +
-                       $"pulsos={config.PulsosPorCredito} pausa={emuCfg.MetodoPausa} aviso={config.Aviso}");
+                       $"pulsos={config.PulsosPorCredito} pausa={emuCfg.MetodoPausa} aviso={config.Aviso} modo={config.Modo}" +
+                       (config.Modo != "entrada" ? $" libres={config.MinutosLibres}min (sorteo {_segundosObjetivo}s)" : "") +
+                       (config.Modo == "silencioso" ? $" timer={config.TiempoTimer}s" : ""));
         }
 
         public void Iniciar() => _timer.Start();
+
+        /// <summary>Primera espera según el modo: entrada = tiempo_overlay; diferido y silencioso = minutos libres.</summary>
+        private int PrimeraEspera() => Config.Modo == "entrada" ? Config.TiempoOverlay : Config.SorteoSegundosLibres();
 
         public void DevolverFoco() => _control.DevolverFoco();
 
@@ -71,9 +80,12 @@ namespace MonederoArcade
             Config.FastForward = nuevo.FastForward;
             Config.TiempoFastForward = nuevo.TiempoFastForward;
             Config.Aviso = nuevo.Aviso;
+            Config.Modo = nuevo.Modo;
+            Config.MinutosLibres = nuevo.MinutosLibres;
+            Config.TiempoTimer = nuevo.TiempoTimer;
             _control.SinMinimizar = nuevo.Aviso == "banner";
             if (_fase == FaseSesion.EsperandoPrimerAviso)
-                _segundosObjetivo = _primerPeriodo ? Config.TiempoOverlay : Config.IntervaloLoop;
+                _segundosObjetivo = _primerPeriodo || Config.Modo == "silencioso" ? PrimeraEspera() : Config.IntervaloLoop;
             Logger.Log("Config de la sesión actualizada desde la interfaz");
         }
 
@@ -84,7 +96,17 @@ namespace MonederoArcade
                 case FaseSesion.EsperandoPrimerAviso:
                     _segundosTranscurridos++;
                     ManejarFastForward();
-                    if (_segundosTranscurridos >= _segundosObjetivo) MostrarOverlay();
+                    if (_segundosTranscurridos >= _segundosObjetivo)
+                    {
+                        if (Config.Modo == "silencioso") MostrarTimer();
+                        else MostrarOverlay();
+                    }
+                    break;
+
+                case FaseSesion.TimerVisible:
+                    _countdownRestante--;
+                    _timerForm.Actualizar(Math.Max(_countdownRestante, 0));
+                    if (_countdownRestante <= 0) AbandonoSinCredito();
                     break;
 
                 case FaseSesion.OverlayVisible:
@@ -159,6 +181,36 @@ namespace MonederoArcade
         private void OcultarOverlay()
         {
             if (!_disposed && !_overlay.IsDisposed) _overlay.Hide();
+            if (!_disposed && !_timerForm.IsDisposed) _timerForm.Hide();
+        }
+
+        /// <summary>Modo silencioso: timer chico en una esquina, el juego sigue corriendo (sin pausa).</summary>
+        private void MostrarTimer()
+        {
+            _fase = FaseSesion.TimerVisible;
+            _countdownRestante = Math.Max(5, Config.TiempoTimer);
+            _pulsos = 0;
+            _ffActivo = false;
+            _ffTerminado = true;
+            Logger.Log($"Modo silencioso: timer de {_countdownRestante}s (sin pausa)");
+            Armar();
+            _timerForm.Mostrar(ObtenerPantallaObjetivo(), _countdownRestante);
+            if (Config.UsaOsd) Task.Run(() => _control.ShowMsg($"INSERT COIN - {_countdownRestante}s"));
+        }
+
+        /// <summary>Modo silencioso con crédito: se esconde el timer y empieza otro período libre.</summary>
+        private void RenovarSilencioso()
+        {
+            if (_fase != FaseSesion.TimerVisible) return;
+            var estilo = EstiloOverlay.Cargar(Path.Combine(_baseDir, "config.ini"));
+            Sonido.Reproducir(_baseDir, estilo.Sonido, estilo.Volumen);
+            Desarmar();
+            OcultarOverlay();
+            _fase = FaseSesion.EsperandoPrimerAviso;
+            _primerPeriodo = false;
+            _segundosObjetivo = Config.SorteoSegundosLibres();
+            _segundosTranscurridos = 0;
+            Logger.Log($"Crédito en modo silencioso: otro período de {_segundosObjetivo}s");
         }
 
         private void MostrarOverlay()
@@ -202,7 +254,7 @@ namespace MonederoArcade
         /// <summary>Cuenta pulsos: se necesitan PulsosPorCredito pulsos dentro de una ventana de 2 s.</summary>
         private void ContarPulso()
         {
-            if (_fase != FaseSesion.OverlayVisible) return;
+            if (_fase != FaseSesion.OverlayVisible && _fase != FaseSesion.TimerVisible) return;
             int requeridos = Math.Max(1, Config.PulsosPorCredito);
             var ahora = DateTime.UtcNow;
             if (_pulsos == 0 || (ahora - _primerPulso).TotalSeconds > 2)
@@ -215,7 +267,8 @@ namespace MonederoArcade
             if (_pulsos >= requeridos)
             {
                 _pulsos = 0;
-                Reanudar();
+                if (_fase == FaseSesion.TimerVisible) RenovarSilencioso();
+                else Reanudar();
             }
         }
 
@@ -243,8 +296,13 @@ namespace MonederoArcade
             Desarmar();
             _timer.Stop();
 
-            // El overlay se queda tapando el juego durante el cierre.
-            if (Config.UsaOverlay) _overlay.MostrarGameOver();
+            // El overlay se queda tapando el juego durante el cierre (en modo silencioso todavía no estaba a la vista).
+            if (!_timerForm.IsDisposed) _timerForm.Hide();
+            if (Config.UsaOverlay)
+            {
+                if (!_overlay.Visible) _overlay.MostrarEn(ObtenerPantallaObjetivo(), 0);
+                _overlay.MostrarGameOver();
+            }
             if (Config.UsaOsd) Task.Run(() => _control.ShowMsg("GAME OVER"));
 
             Task.Run(() =>
@@ -294,6 +352,7 @@ namespace MonederoArcade
             Desarmar();
             _timer.Dispose();
             _overlay.Dispose();
+            _timerForm.Dispose();
         }
     }
 }

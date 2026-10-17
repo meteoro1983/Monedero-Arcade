@@ -13,6 +13,42 @@ namespace MonederoArcade
         public int TiempoFastForward { get; set; } = 0;     // segundos de fast-forward desde el lanzamiento
         public string Aviso { get; set; } = "overlay";      // overlay | osd | ambos (osd = mensaje dentro de RetroArch)
 
+        /// <summary>
+        /// Cómo se pide el crédito:
+        ///   entrada    = al arrancar (a los tiempo_overlay s) y de nuevo cada intervalo_loop s;
+        ///   diferido   = los primeros minutos_libres sin molestar; recién ahí el cartel, y después cada intervalo_loop;
+        ///   silencioso = free play limitado: cada minutos_libres aparece un timer chico (tiempo_timer s) sin pausar;
+        ///                con crédito sigue otro período, sin crédito se cierra el juego.
+        /// </summary>
+        public string Modo { get; set; } = "entrada";
+        /// <summary>Minutos sin molestar: "20" o un rango al azar "10-20" (se sortea en cada período).</summary>
+        public string MinutosLibres { get; set; } = "20";
+        /// <summary>Modo silencioso: segundos del timer para poner crédito antes de que se cierre el juego.</summary>
+        public int TiempoTimer { get; set; } = 90;
+
+        public static readonly string[] Modos = { "entrada", "diferido", "silencioso" };
+        private static readonly Random Azar = new();
+
+        /// <summary>Sortea los segundos libres según MinutosLibres ("20" o "10-20"). Mínimo 1 minuto.</summary>
+        public int SorteoSegundosLibres()
+        {
+            var partes = (MinutosLibres ?? "").Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            double a = partes.Length > 0 && double.TryParse(partes[0].Replace(',', '.'), System.Globalization.NumberStyles.Float,
+                                                            System.Globalization.CultureInfo.InvariantCulture, out var x) ? x : 20;
+            double b = partes.Length > 1 && double.TryParse(partes[1].Replace(',', '.'), System.Globalization.NumberStyles.Float,
+                                                            System.Globalization.CultureInfo.InvariantCulture, out var y) ? y : a;
+            if (b < a) (a, b) = (b, a);
+            a = Math.Max(1, a);
+            b = Math.Max(a, b);
+            return (int)Math.Round((a + Azar.NextDouble() * (b - a)) * 60);
+        }
+
+        public static string NormalizarModo(string? m)
+        {
+            m = (m ?? "").Trim().ToLowerInvariant();
+            return Modos.Contains(m) ? m : "entrada";
+        }
+
         public bool UsaOverlay => Aviso != "osd";
         public bool UsaOsd => OsdRetroArch || Aviso == "osd" || Aviso == "ambos";
     }
@@ -95,6 +131,14 @@ osd_retroarch=0
 pulsos_por_credito=1
 fast_forward=0
 tiempo_fast_forward=0
+; modo: entrada    = pide crédito al arrancar (a los tiempo_overlay s) y cada intervalo_loop s
+;       diferido   = minutos_libres sin molestar; recién ahí el cartel, y después cada intervalo_loop s
+;       silencioso = free play limitado: cada minutos_libres aparece un timer chico de tiempo_timer s (sin pausar);
+;                    con crédito sigue otro período; sin crédito se cierra el juego
+; minutos_libres: fijo (20) o al azar en un rango (10-20)
+modo=entrada
+minutos_libres=20
+tiempo_timer=90
 
 [dreamcast]
 tiempo_overlay=20
@@ -213,6 +257,9 @@ tiempo_countdown=20
                 FastForward = g.GetBool(sistema, "fast_forward", g.GetBool("default", "fast_forward", false)),
                 TiempoFastForward = g.GetInt(sistema, "tiempo_fast_forward", g.GetInt("default", "tiempo_fast_forward", 0)),
                 Aviso = g.GetString(sistema, "aviso", g.GetString("default", "aviso", "overlay")).Trim().ToLowerInvariant(),
+                Modo = GameConfig.NormalizarModo(g.GetString(sistema, "modo", g.GetString("default", "modo", "entrada"))),
+                MinutosLibres = g.GetString(sistema, "minutos_libres", g.GetString("default", "minutos_libres", "20")).Trim(),
+                TiempoTimer = g.GetInt(sistema, "tiempo_timer", g.GetInt("default", "tiempo_timer", 90)),
             };
         }
 
@@ -279,6 +326,9 @@ tiempo_countdown=20
                 ("tiempo_countdown", c.TiempoCountdown.ToString()),
                 ("fast_forward", c.FastForward ? "1" : "0"),
                 ("tiempo_fast_forward", c.TiempoFastForward.ToString()),
+                ("modo", c.Modo),
+                ("minutos_libres", c.MinutosLibres),
+                ("tiempo_timer", c.TiempoTimer.ToString()),
             });
         }
 
@@ -307,6 +357,9 @@ tiempo_countdown=20
             cfg.FastForward = romIni.GetBool("monedero", "fast_forward", cfg.FastForward);
             cfg.TiempoFastForward = romIni.GetInt("monedero", "tiempo_fast_forward", cfg.TiempoFastForward);
             cfg.Aviso = romIni.GetString("monedero", "aviso", cfg.Aviso).Trim().ToLowerInvariant();
+            cfg.Modo = GameConfig.NormalizarModo(romIni.GetString("monedero", "modo", cfg.Modo));
+            cfg.MinutosLibres = romIni.GetString("monedero", "minutos_libres", cfg.MinutosLibres).Trim();
+            cfg.TiempoTimer = romIni.GetInt("monedero", "tiempo_timer", cfg.TiempoTimer);
             return cfg;
         }
 
@@ -319,6 +372,9 @@ tiempo_countdown=20
             romIni.Set("monedero", "tiempo_countdown", cfg.TiempoCountdown.ToString());
             romIni.Set("monedero", "fast_forward", cfg.FastForward ? "1" : "0");
             romIni.Set("monedero", "tiempo_fast_forward", cfg.TiempoFastForward.ToString());
+            romIni.Set("monedero", "modo", cfg.Modo);
+            romIni.Set("monedero", "minutos_libres", cfg.MinutosLibres);
+            romIni.Set("monedero", "tiempo_timer", cfg.TiempoTimer.ToString());
             romIni.Save();
         }
 
@@ -341,6 +397,9 @@ tiempo_countdown=20
             g.Set(sistema, "tiempo_countdown", c.TiempoCountdown.ToString());
             g.Set(sistema, "fast_forward", c.FastForward ? "1" : "0");
             g.Set(sistema, "tiempo_fast_forward", c.TiempoFastForward.ToString());
+            g.Set(sistema, "modo", c.Modo);
+            g.Set(sistema, "minutos_libres", c.MinutosLibres);
+            g.Set(sistema, "tiempo_timer", c.TiempoTimer.ToString());
             g.Save();
         }
 

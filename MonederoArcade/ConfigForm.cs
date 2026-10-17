@@ -48,6 +48,9 @@ namespace MonederoArcade
         private readonly NumericUpDown _nCountdown = NuevoNum();
         private readonly NumericUpDown _nFf = NuevoNum();
         private readonly CheckBox _chkFf = new();
+        private readonly ComboBox _cmbModo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+        private readonly TextBox _txtLibres = new() { Width = 90 };
+        private readonly NumericUpDown _nTimer = NuevoNum();
         private List<GameSession> _sesiones = new();
 
         private static NumericUpDown NuevoNum() => new NumericUpDown { Minimum = 0, Maximum = 86400, Width = 90 };
@@ -103,6 +106,11 @@ namespace MonederoArcade
             _grid.Columns.Add("tiempo_countdown", "Countdown (s)");
             _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "fast_forward", HeaderText = "Fast-forward" });
             _grid.Columns.Add("tiempo_fast_forward", "FF hasta (s)");
+            var colModo = new DataGridViewComboBoxColumn { Name = "modo", HeaderText = "Modo", FlatStyle = FlatStyle.Flat };
+            colModo.Items.AddRange(GameConfig.Modos);
+            _grid.Columns.Add(colModo);
+            _grid.Columns.Add("minutos_libres", "Min. libres");
+            _grid.Columns.Add("tiempo_timer", "Timer (s)");
 
             var panel = new FlowLayoutPanel
             {
@@ -126,7 +134,8 @@ namespace MonederoArcade
             foreach (var s in _cfg.ListarSistemas())
             {
                 var c = _cfg.LeerSistema(s);
-                _grid.Rows.Add(s, c.TiempoOverlay, c.IntervaloLoop, c.TiempoCountdown, c.FastForward, c.TiempoFastForward);
+                _grid.Rows.Add(s, c.TiempoOverlay, c.IntervaloLoop, c.TiempoCountdown, c.FastForward, c.TiempoFastForward,
+                               c.Modo, c.MinutosLibres, c.TiempoTimer);
             }
         }
 
@@ -141,7 +150,8 @@ namespace MonederoArcade
                 if (!TryInt(row.Cells["tiempo_overlay"].Value, out var ov) ||
                     !TryInt(row.Cells["intervalo_loop"].Value, out var lp) ||
                     !TryInt(row.Cells["tiempo_countdown"].Value, out var cd) ||
-                    !TryInt(row.Cells["tiempo_fast_forward"].Value, out var ff))
+                    !TryInt(row.Cells["tiempo_fast_forward"].Value, out var ff) ||
+                    !TryInt(row.Cells["tiempo_timer"].Value, out var tm))
                 {
                     Msg($"Valores inválidos en '{sis}': deben ser números enteros.");
                     return;
@@ -153,7 +163,10 @@ namespace MonederoArcade
                     IntervaloLoop = lp,
                     TiempoCountdown = cd,
                     FastForward = ffOn,
-                    TiempoFastForward = ff
+                    TiempoFastForward = ff,
+                    Modo = GameConfig.NormalizarModo(Convert.ToString(row.Cells["modo"].Value)),
+                    MinutosLibres = (Convert.ToString(row.Cells["minutos_libres"].Value) ?? "20").Trim(),
+                    TiempoTimer = tm
                 }));
             }
             foreach (var (sis, c) in nuevos) _cfg.GuardarSistema(sis, c);
@@ -252,6 +265,17 @@ namespace MonederoArcade
 
             y = Fila(tab, "Fast-forward hasta (s)", _nFf, y);
 
+            _cmbModo.Items.AddRange(GameConfig.Modos);
+            var lModo = new Label { Text = "Modo (entrada / diferido / silencioso)", Left = 12, Top = y + 3, Width = 200 };
+            _cmbModo.Left = 220; _cmbModo.Top = y;
+            tab.Controls.Add(lModo); tab.Controls.Add(_cmbModo);
+            y += 30;
+            var lLib = new Label { Text = "Minutos libres (20 o 10-20)", Left = 12, Top = y + 3, Width = 200 };
+            _txtLibres.Left = 220; _txtLibres.Top = y;
+            tab.Controls.Add(lLib); tab.Controls.Add(_txtLibres);
+            y += 30;
+            y = Fila(tab, "Timer silencioso (s)", _nTimer, y);
+
             var bGuardar = Boton("Guardar (activa este juego)", (_, _) => GuardarJuego());
             bGuardar.Left = 12; bGuardar.Top = y + 8;
             var bAbrir = Boton("Abrir .ini", (_, _) => AbrirIni());
@@ -293,6 +317,9 @@ namespace MonederoArcade
             _nCountdown.Value = Acotar(c.TiempoCountdown);
             _chkFf.Checked = c.FastForward;
             _nFf.Value = Acotar(c.TiempoFastForward);
+            _cmbModo.SelectedItem = GameConfig.NormalizarModo(c.Modo);
+            _txtLibres.Text = c.MinutosLibres;
+            _nTimer.Value = Acotar(c.TiempoTimer);
         }
 
         private void GuardarJuego()
@@ -311,7 +338,10 @@ namespace MonederoArcade
                 CreditPadName = s.Config.CreditPadName,
                 PulsosPorCredito = s.Config.PulsosPorCredito,
                 OsdRetroArch = s.Config.OsdRetroArch,
-                Aviso = s.Config.Aviso
+                Aviso = s.Config.Aviso,
+                Modo = GameConfig.NormalizarModo(_cmbModo.SelectedItem?.ToString()),
+                MinutosLibres = _txtLibres.Text.Trim().Length > 0 ? _txtLibres.Text.Trim() : "20",
+                TiempoTimer = (int)_nTimer.Value
             };
             _cfg.ActivarYGuardar(s.Sistema, s.NombreArchivo, c);
             s.AplicarConfig(c);

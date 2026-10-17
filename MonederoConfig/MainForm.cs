@@ -214,6 +214,11 @@ namespace MonederoConfig
             colAviso.Items.AddRange(Avisos);
             g.Columns.Add(colAviso);
             g.Columns.Add(new DataGridViewTextBoxColumn { Name = "credit_key", HeaderText = "Tecla", FillWeight = 60 });
+            var colModo = new DataGridViewComboBoxColumn { Name = "modo", HeaderText = "Modo", FillWeight = 80, FlatStyle = FlatStyle.Flat };
+            colModo.Items.AddRange(GameConfig.Modos);
+            g.Columns.Add(colModo);
+            g.Columns.Add(new DataGridViewTextBoxColumn { Name = "minutos_libres", HeaderText = "Libres min", FillWeight = 60 });
+            g.Columns.Add(new DataGridViewTextBoxColumn { Name = "tiempo_timer", HeaderText = "Timer s", FillWeight = 55 });
             g.CellDoubleClick += (_, e) =>
             {
                 if (e.RowIndex >= 0 && g.Columns[e.ColumnIndex].Name == "credit_key") AsignarTeclaSistema();
@@ -230,7 +235,9 @@ namespace MonederoConfig
             pie.Controls.Add(Boton("Tecla del sistema...", AsignarTeclaSistema));
             pie.Controls.Add(new Label
             {
-                Text = "Cartel: overlay = ventana; osd = mensaje de RetroArch; ambos = las dos (N64/OpenGL). Tecla vacía = la general.",
+                Text = "Cartel: overlay = ventana; osd = mensaje de RetroArch; ambos = las dos (N64/OpenGL). Tecla vacía = la general. " +
+                       "Modo: entrada = pide al arrancar y cada Loop; diferido = Libres min sin molestar y después el cartel; " +
+                       "silencioso = free play limitado: cada Libres min un timer chico de Timer s, sin crédito cierra. Libres: 20 o 10-20 (al azar).",
                 AutoSize = true, MaximumSize = new Size(640, 0), ForeColor = Color.DimGray
             });
 
@@ -258,7 +265,7 @@ namespace MonederoConfig
                 bool ex = exentos.Contains(s, StringComparer.OrdinalIgnoreCase);
                 var aviso = Avisos.Contains(c.Aviso) ? c.Aviso : "overlay";
                 _gridSis.Rows.Add(s, ex, c.TiempoOverlay, c.IntervaloLoop, c.TiempoCountdown, c.FastForward,
-                                  c.TiempoFastForward, aviso, g.Get(s, "credit_key") ?? "");
+                                  c.TiempoFastForward, aviso, g.Get(s, "credit_key") ?? "", c.Modo, c.MinutosLibres, c.TiempoTimer);
             }
             if (_gridSis.Rows.Count > 0) _gridSis.Rows[0].DefaultCellStyle.BackColor = Color.LightYellow;
         }
@@ -275,7 +282,7 @@ namespace MonederoConfig
                 if (string.IsNullOrEmpty(s)) continue;
                 if (r.Cells["exento"].Value is true && s != "default") exentos.Add(s);
 
-                foreach (var col in new[] { "tiempo_overlay", "intervalo_loop", "tiempo_countdown", "tiempo_fast_forward" })
+                foreach (var col in new[] { "tiempo_overlay", "intervalo_loop", "tiempo_countdown", "tiempo_fast_forward", "tiempo_timer" })
                 {
                     var v = r.Cells[col].Value?.ToString()?.Trim();
                     if (int.TryParse(v, out var n) && n >= 0) g.Set(s, col, n.ToString());
@@ -283,6 +290,9 @@ namespace MonederoConfig
                 }
                 g.Set(s, "fast_forward", r.Cells["fast_forward"].Value is true ? "1" : "0");
                 g.Set(s, "aviso", r.Cells["aviso"].Value?.ToString() ?? "overlay");
+                g.Set(s, "modo", GameConfig.NormalizarModo(r.Cells["modo"].Value?.ToString()));
+                var libres = r.Cells["minutos_libres"].Value?.ToString()?.Trim() ?? "";
+                g.Set(s, "minutos_libres", libres.Length > 0 ? libres : "20");
 
                 var tecla = r.Cells["credit_key"].Value?.ToString()?.Trim() ?? "";
                 if (tecla.Length > 0) g.Set(s, "credit_key", tecla);
@@ -388,6 +398,9 @@ namespace MonederoConfig
         private readonly NumericUpDown _jOverlay = Num(), _jLoop = Num(), _jCount = Num(), _jFf = Num();
         private readonly CheckBox _jChkFf = new() { Text = "Fast-forward", AutoSize = true };
         private readonly ComboBox _jAviso = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
+        private readonly ComboBox _jModo = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 90 };
+        private readonly TextBox _jLibres = new() { Width = 90 };
+        private readonly NumericUpDown _jTimer = Num();
         private List<string> _juegos = new();
 
         private static NumericUpDown Num() => new() { Minimum = 0, Maximum = 86400, Width = 75 };
@@ -402,6 +415,7 @@ namespace MonederoConfig
             arriba.Controls.Add(Boton("Escanear ROMs", EscanearJuegos));
 
             _jAviso.Items.AddRange(Avisos);
+            _jModo.Items.AddRange(GameConfig.Modos);
             var editor = new TableLayoutPanel { Dock = DockStyle.Right, Width = 250, ColumnCount = 2, Padding = new Padding(6, 0, 0, 0) };
             void Add(string e, Control c)
             {
@@ -415,6 +429,9 @@ namespace MonederoConfig
             editor.Controls.Add(_jChkFf); editor.SetColumnSpan(_jChkFf, 2);
             Add("FF hasta (s):", _jFf);
             Add("Cartel:", _jAviso);
+            Add("Modo:", _jModo);
+            Add("Libres (min):", _jLibres);
+            Add("Timer (s):", _jTimer);
             var bGuardar = Boton("Guardar juego", GuardarJuego);
             editor.Controls.Add(bGuardar); editor.SetColumnSpan(bGuardar, 2);
 
@@ -475,6 +492,9 @@ namespace MonederoConfig
             _jChkFf.Checked = ini.GetBool("monedero", "fast_forward", cfg.FastForward);
             _jFf.Value = Math.Clamp(ini.GetInt("monedero", "tiempo_fast_forward", cfg.TiempoFastForward), 0, 86400);
             Elegir(_jAviso, ini.GetString("monedero", "aviso", cfg.Aviso));
+            Elegir(_jModo, GameConfig.NormalizarModo(ini.GetString("monedero", "modo", cfg.Modo)));
+            _jLibres.Text = ini.GetString("monedero", "minutos_libres", cfg.MinutosLibres);
+            _jTimer.Value = Math.Clamp(ini.GetInt("monedero", "tiempo_timer", cfg.TiempoTimer), 0, 86400);
         }
 
         private void GuardarJuego()
@@ -488,6 +508,9 @@ namespace MonederoConfig
             ini.Set("monedero", "fast_forward", _jChkFf.Checked ? "1" : "0");
             ini.Set("monedero", "tiempo_fast_forward", ((int)_jFf.Value).ToString());
             ini.Set("monedero", "aviso", _jAviso.SelectedItem?.ToString() ?? "overlay");
+            ini.Set("monedero", "modo", GameConfig.NormalizarModo(_jModo.SelectedItem?.ToString()));
+            ini.Set("monedero", "minutos_libres", _jLibres.Text.Trim().Length > 0 ? _jLibres.Text.Trim() : "20");
+            ini.Set("monedero", "tiempo_timer", ((int)_jTimer.Value).ToString());
             ini.Save();
             Ok(_chkActivo.Checked ? "Guardado: este juego usa sus propios valores."
                                   : "Guardado, pero «activo» está apagado: el juego sigue usando los valores del sistema.");

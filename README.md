@@ -39,6 +39,15 @@ ports varios).
   - `osd`: mensaje dentro de RetroArch.
   - `ambos`: los dos (útil en N64/OpenGL, que puede tapar ventanas).
   - `banner`: franja que baja desde arriba sin minimizar ni quitarle el foco al juego.
+- **Modos de cobro** por sistema o por juego (`modo=`):
+  - `entrada` (por defecto): pide crédito al arrancar (a los `tiempo_overlay` segundos, para dejar pasar la intro) y
+    de nuevo cada `intervalo_loop` segundos.
+  - `diferido`: los primeros `minutos_libres` sin molestar; recién ahí aparece el cartel, y después cada
+    `intervalo_loop` segundos.
+  - `silencioso`: **free play limitado** (ej. una hora). Nunca pausa ni tapa el juego: al cumplirse `minutos_libres`
+    aparece un timer chico en una esquina con `tiempo_timer` segundos (ej. 60-120). Con crédito empieza otro
+    período libre; sin crédito se cierra el juego/emulador (GAME OVER).
+  - `minutos_libres` puede ser fijo (`20`) o un rango al azar (`10-20`), que se sortea en cada período.
 - **Crédito**: tecla de teclado (el encoder del monedero físico, por defecto `5`) o botón de un joystick XInput
   (por defecto Select). `pulsos_por_credito` sirve para monederos que mandan varios pulsos por moneda.
 - **Salida universal Select+Start** (juegos de PC): manteniendo el combo medio segundo se cierra el juego y se vuelve a
