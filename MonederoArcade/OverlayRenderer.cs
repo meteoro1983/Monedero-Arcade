@@ -149,7 +149,7 @@ namespace MonederoArcade
                 {
                     Linea(g, fam, estilo.Linea1, 20, Brushes.White, logico, vh * 0.14f);
                     Linea(g, fam, estilo.Linea2, 12, Brushes.White, logico, vh * 0.27f);
-                    Linea(g, fam, countdown, 64, Brushes.Yellow, logico, vh * 0.62f);
+                    Linea(g, fam, countdown, 48, Brushes.Yellow, logico, vh * 0.58f);
                 }
             }
 
