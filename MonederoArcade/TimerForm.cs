@@ -90,28 +90,30 @@ namespace MonederoArcade
             // (AnchoRel*4) : (AltoRel*3); en un monitor moderno, con píxeles cuadrados.
             bool crt = OverlayRenderer.EsCrt(_pantalla, _estilo.Aspecto);
             double aspecto = crt ? AnchoRel * 4 / (AltoRel * 3) : (double)Width / Height;
-            int vh = 120, vw = (int)Math.Round(vh * aspecto);
+            // lienzo con el alto real (nítido) y el ancho con que se VE; después solo se estira a lo ancho
+            int vh = Math.Max(40, Height), vw = (int)Math.Round(vh * aspecto);
             using var lienzo = new Bitmap(vw, vh);
             using (var g = Graphics.FromImage(lienzo))
             {
                 g.Clear(Color.Black);
-                g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.AntiAlias;
                 var fam = OverlayRenderer.Familia(_baseDir, _estilo.Fuente);
                 var urgente = _segundos <= 10;
                 var parpadeo = urgente && DateTime.Now.Millisecond < 500;
-                using var borde = new Pen(urgente ? Color.FromArgb(230, 40, 40) : Color.FromArgb(255, 210, 40), 4);
-                g.DrawRectangle(borde, 2, 2, vw - 5, vh - 5);
+                float b = Math.Max(2f, vh / 30f);
+                using var borde = new Pen(urgente ? Color.FromArgb(230, 40, 40) : Color.FromArgb(255, 210, 40), b);
+                g.DrawRectangle(borde, b / 2, b / 2, vw - b, vh - b);
                 var centro = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                using (var f1 = new Font(fam, 15, FontStyle.Regular, GraphicsUnit.Pixel))
+                using (var f1 = new Font(fam, vh * 0.16f, FontStyle.Regular, GraphicsUnit.Pixel))
                 using (var amarillo = new SolidBrush(Color.FromArgb(255, 210, 40)))
-                    g.DrawString(_estilo.Linea1, f1, amarillo, new RectangleF(0, 8, vw, 34), centro);
+                    g.DrawString(_estilo.Linea1, f1, amarillo, new RectangleF(0, vh * 0.05f, vw, vh * 0.30f), centro);
                 var t = $"{_segundos / 60}:{_segundos % 60:00}";
-                using (var f2 = new Font(fam, 44, FontStyle.Regular, GraphicsUnit.Pixel))
+                using (var f2 = new Font(fam, vh * 0.42f, FontStyle.Regular, GraphicsUnit.Pixel))
                 using (var color = new SolidBrush(urgente ? (parpadeo ? Color.White : Color.FromArgb(240, 50, 50)) : Color.White))
-                    g.DrawString(t, f2, color, new RectangleF(0, 40, vw, 76), centro);
+                    g.DrawString(t, f2, color, new RectangleF(0, vh * 0.32f, vw, vh * 0.64f), centro);
             }
-            e.Graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
-            e.Graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             e.Graphics.DrawImage(lienzo, ClientRectangle);
         }
 

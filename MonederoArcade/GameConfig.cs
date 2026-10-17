@@ -101,7 +101,8 @@ namespace MonederoArcade
 [general]
 ; pin_config=1234
 ; (si se define pin_config, Ctrl+Alt+F5 pide ese PIN antes de abrir la configuracion)
-fuente=PressStart2P.ttf
+; fuente: una instalada (Segoe UI Black, Bahnschrift, Arial Black...) o un .ttf/.otf de esta carpeta
+fuente=Segoe UI Black
 sonido_credito=coin-sound.mp3
 volumen_sonido=80
 ; aspecto_pantalla: auto (CRT 4:3 salvo monitores modernos de 720+ lineas) | 4:3 | real

@@ -99,7 +99,7 @@ namespace MonederoConfig
             _cmbSonido.Items.Add("(sin sonido)");
             foreach (var f in Directory.GetFiles(_baseDir, "*.ttf").Concat(Directory.GetFiles(_baseDir, "*.otf")))
                 _cmbFuente.Items.Add(Path.GetFileName(f));
-            _cmbFuente.Items.Add("Consolas");
+            foreach (var f in OverlayRenderer.FuentesSistema) _cmbFuente.Items.Add(f);
 
             Add("Tecla de crédito:", Fila(_lblTecla, Boton("Asignar tecla...", AsignarTeclaCredito)));
             Add("Botón joystick (XInput):", Fila(_cmbPad, Boton("Detectar...", DetectarPad)));
@@ -156,7 +156,7 @@ namespace MonederoConfig
             g.Set("default", "pulsos_por_credito", ((int)_nPulsos.Value).ToString());
             g.Set("general", "sonido_credito", SonidoElegido());
             g.Set("general", "volumen_sonido", ((int)_nVolumen.Value).ToString());
-            g.Set("general", "fuente", _cmbFuente.SelectedItem?.ToString() ?? "PressStart2P.ttf");
+            g.Set("general", "fuente", _cmbFuente.SelectedItem?.ToString() ?? "Segoe UI Black");
             g.Set("general", "aspecto_pantalla", _cmbAspecto.SelectedItem?.ToString() ?? "auto");
             g.Set("general", "texto_linea1", _txtL1.Text.Trim());
             g.Set("general", "texto_linea2", _txtL2.Text.Trim());
@@ -566,7 +566,7 @@ namespace MonederoConfig
             var modo = new Size(w, h);
             var estilo = new EstiloOverlay
             {
-                Fuente = _cmbFuente.SelectedItem?.ToString() ?? "PressStart2P.ttf",
+                Fuente = _cmbFuente.SelectedItem?.ToString() ?? "Segoe UI Black",
                 Aspecto = _cmbAspecto.SelectedItem?.ToString() ?? "auto",
                 Linea1 = _txtL1.Text, Linea2 = _txtL2.Text, GameOver1 = _txtG1.Text, GameOver2 = _txtG2.Text
             };

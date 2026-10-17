@@ -7,6 +7,18 @@ namespace MonederoArcade
         [STAThread]
         private static void Main()
         {
+            // Pruebas sin el arcade: monedero.exe --vista-previa 2560x240 salida.png [gameover|banner]
+            var args = Environment.GetCommandLineArgs();
+            if (args.Length >= 4 && args[1] == "--vista-previa")
+            {
+                VistaPrevia(args);
+                return;
+            }
+
+            // Una sola instancia: con dos monederos abiertos, cada crédito se cobraría (y sonaría) dos veces.
+            using var unica = new Mutex(true, @"Local\MonederoArcade", out bool primera);
+            if (!primera) return;
+
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             ApplicationConfiguration.Initialize();
             UiThread.Init();
@@ -156,6 +168,21 @@ namespace MonederoArcade
             pollTimer.Start();
 
             Application.Run();
+        }
+
+        /// <summary>Dibuja el cartel en un PNG para un modo de video (pruebas sin el arcade).</summary>
+        private static void VistaPrevia(string[] args)
+        {
+            var wh = args[2].Split('x');
+            var modo = new Size(int.Parse(wh[0]), int.Parse(wh[1]));
+            var dir = AppDomain.CurrentDomain.BaseDirectory;
+            var estilo = EstiloOverlay.Cargar(Path.Combine(dir, "config.ini"));
+            bool banner = args.Length > 4 && args[4] == "banner", gameOver = args.Length > 4 && args[4] == "gameover";
+            int alto = banner ? OverlayRenderer.AltoBannerVirtual(modo) * OverlayRenderer.FactorLineas(modo) : modo.Height;
+            using var bmp = new Bitmap(modo.Width, alto);
+            using (var g = Graphics.FromImage(bmp))
+                OverlayRenderer.Dibujar(g, new Rectangle(0, 0, modo.Width, alto), modo, estilo, dir, "15", gameOver, banner);
+            bmp.Save(args[3], System.Drawing.Imaging.ImageFormat.Png);
         }
     }
 }
